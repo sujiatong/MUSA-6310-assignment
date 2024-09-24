@@ -1,0 +1,250 @@
+---
+title: "reproducible data story"
+output: html_document
+date: "2024-09-23"
+---
+
+# Introduction
+
+Over the past few decades, the population pattern of California has changed. People from other states infrequently shift to California, so Out-of-state immigrants have decreased. Some Californians are considering leaving California due to the dynamic factors, such as political factors, economic opportunities, and cultural landscape. However, Foreign immigrants are still pulling in California.
+In the following analysis, I use the ACS census data to examine the enter population of native-born and foreign-born California by county levels. 
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# R Markdown:
+
+```{r cars}
+library(tidyverse)
+library(tidycensus)
+library(sf)
+library(kableExtra)
+library(gridExtra)
+options(scipen=999)
+options(tigris_class = "sf")
+
+```
+
+```{r}
+census_api_key("d9ebfd04caa0138647fbacd94c657cdecbf705e9", overwrite = TRUE)
+
+```
+
+# getting data
+Getting ACS data. 
+```{r}
+acs_variable_list.2020 <- load_variables(2020, #year
+                                         "acs5", #five year ACS estimates
+                                         cache = TRUE)
+```
+
+intrested variables
+```{r}
+#B05004_007: Estimate!!Total:!!Foreign born
+#B05004_010: Estimate!!Total:!! Foreign born:!! Naturalized U.S. citizen:
+#B05004_013: Estimate!!Total:!!Foreign born:!!Not a U.S. citizen:
+
+#B05005_002: Estimate!!Total:!!Entered 2010 or later
+#B05005_003: Estimate!!Total:!!Entered 2010 or later:!!Native
+#B05005_004: Estimate!!Total:!!Entered 2010 or later:!!Foreign born:
+#B05005_005: Estimate!!Total:!!Entered 2010 or later:!!Naturalized U.S. citizen
+#B05005_006: Estimate!!Total:!!Entered 2010 or later:!!Not a U.S. citizen
+
+#B05005_007: Estimate!!Total:!!Entered 2000 to 2009:
+#B05005_008: Estimate!!Total:!!Entered 2000 to 2009:!!Native
+#B05005_009: Estimate!!Total:!!Entered 2000 to 2009:!!Foreign born:
+#B05005_010: Estimate!!Total:!!Entered 2000 to 2009:!!Foreign born:!!Naturalized U.S. citizen
+#B05005_011: Estimate!!Total:!!Entered 2000 to 2009:!!Foreign born:!!Not a U.S. citizen
+
+#B05005_012: Estimate!!Total:!!Entered 1990 to 1999:
+#B05005_013 Estimate!!Total:!!Entered 1990 to 1999:!!Native
+#B05005_014: Estimate!!Total:!!Entered 1990 to 1999:!!Foreign born:
+#B05005_015: Estimate!!Total:!!Entered 1990 to 1999:!!Foreign born:!!Naturalized U.S. citizen
+#B05005_016: Estimate!!Total:!!Entered 1990 to 1999:!!Foreign born:!!Not a U.S. citizen
+
+#B05005_017 Estimate!!Total:!!Entered before 1990:
+#B05005_018 Estimate!!Total:!!Entered before 1990:!!Native
+#B05005_019 Estimate!!Total:!!Entered before 1990:!!Foreign born:
+#B05005_020 Estimate!!Total:!!Entered before 1990:!!Foreign born:!!Naturalized U.S. citizen
+#B05005_021 Estimate!!Total:!!Entered before 1990:!!Foreign born:!!Not a U.S. citizen
+
+#B05002_022: Estimate!!Total:!!Foreign born:!!Not a U.S. citizen!!Europe
+#B05002_023: Estimate!!Total:!!Foreign born:!!Not a U.S. citizen!!Asia
+#B05002_024: Estimate!!Total:!!Foreign born:!!Not a U.S. citizen!!Africa
+```
+
+
+```{r}
+acsTractsCA.2020 <- 
+  get_acs(geography = "county", year = 2020, 
+          variables = c("B05005_003","B05005_004","B05005_005","B05005_006",
+                        "B05005_008","B05005_009","B05005_010","B05005_011",
+                        "B05005_013","B05005_014",#"B05005_015","B05005_016",
+                        "B05005_018","B05005_019","B05005_020","B05005_021"), 
+          geometry = TRUE, state = 06, #county = "Los Angeles", 
+          output = "wide") %>% 
+  st_transform('ESRI:102728') %>% #spread(key = variable, value = estimate)%>% 
+  rename(Entered_2010_later_Native = B05005_003E, 
+         Entered_2010_foregin_born = B05005_004E,
+         Entered_2010_foregin_born_Naturalized_US_ = B05005_005E, 
+         Entered_2010_foregin_born_Not_US = B05005_006E,
+         Entered_00_09_Native = B05005_008E, 
+         Entered_00_09_foregin_born = B05005_009E,
+         Entered_00_09_foregin_born_Naturalized_US_ = B05005_010E, 
+         Entered__00_09_foregin_born_Not_US = B05005_011E,
+         Entered_99_90_Native =B05005_013E,
+         Entered_99_90_foregin_born = B05005_014E,
+         Entered_before_90_Native = B05005_018E, 
+         Entered_1990_foregin_born = B05005_019E,
+         Entered_1990_foregin_born_Naturalized_US_ = B05005_020E, 
+         Entered__1990_foregin_born_Not_US = B05005_021E,
+         )%>% 
+  dplyr::select(-B05005_003M,-B05005_004M,-B05005_005M,-B05005_006M,
+                -B05005_008M,-B05005_009M,-B05005_010M,-B05005_011M,
+                -B05005_018M,-B05005_019M,-B05005_020M,-B05005_021M)
+
+ 
+  
+```
+# analysis plot
+
+In the follwoing maps, these maps represent population of Native born and foregion born california by county level.
+
+```{r}
+map_1 <- ggplot()+
+  geom_sf(data = acsTractsCA.2020, aes(fill = Entered_2010_later_Native) )+
+  geom_sf(data = acsTractsCA.2020 %>%  #filter(mtAiry == "MT AIRY") %>%
+            st_union(),
+          color = "white",
+          fill = "transparent") +
+    labs(
+    title = "Entered after 2010 :native",
+    subtitle = "",
+    caption = "Data: US Census Bureau, ACS 5-year estimates")
+```
+```{r}
+map_2 <- ggplot()+
+  geom_sf(data = acsTractsCA.2020, aes(fill = Entered_before_90_Native))+
+  geom_sf(data = acsTractsCA.2020 %>%  #filter(mtAiry == "MT AIRY") %>%
+            st_union(),
+          color = "white",
+          fill = "transparent") +
+    labs(
+    title = "Entered before 1990:Native",
+    subtitle = "",
+    caption = "Data: US Census Bureau, ACS 5-year estimates")
+```
+```{r}
+maps <- grid.arrange(map_1, map_2, ncol = 2)
+
+```
+These maps visualize native countries between before_1990 and after 2010, which do not have significant changes in native-born population.
+
+
+```{r}
+map_1f <- ggplot()+
+  geom_sf(data = acsTractsCA.2020, aes(fill = 
+                    Entered_2010_foregin_born) )+
+  geom_sf(data = acsTractsCA.2020 %>%  #filter(mtAiry == "MT AIRY") %>%
+            st_union(),
+          color = "white",
+          fill = "transparent") +
+    labs(
+    title = "Entered 2010 or later: foregin born",
+    subtitle = "",
+    caption = "Data: US Census Bureau, ACS 5-year estimates")
+```
+
+```{r}
+map_2f <- ggplot()+
+  geom_sf(data = acsTractsCA.2020, aes(fill = Entered_1990_foregin_born))+
+  geom_sf(data = acsTractsCA.2020 %>%  #filter(mtAiry == "MT AIRY") %>%
+            st_union(),
+          color = "white",
+          fill = "transparent") +
+    labs(
+    title = "Entered before 1990:foregin born",
+    subtitle = "",
+    caption = "Data: US Census Bureau, ACS 5-year estimates")
+```
+```{r}
+maps_2 <- grid.arrange(map_1f, map_2f, ncol = 2)
+
+```
+
+These maps visualize the distribution of foreign-born entered California in 2020 between before_1990 and after_2010. 
+Regarding this map, the population pattern of foreign-born enter to the US has slightly changed. 
+After 2010, Foreign-born who entered California concentrated in LA and the Bay area. Before 1990, foreign-born who entered in California were more concentrated in LA County.
+
+
+```{r}
+# Convert Year to a factor with the correct order
+data_1 <- data.frame(
+  Category = c("Entered_2010_later_Native_1", "Entered_00_09_Native_1", "Entered_99_90_Native", "Entered_before_90_Native_1"),
+  Year = factor(c("after 2010", "2000-2009", "1990-1999", "before 1990"), 
+                levels = c("before 1990", "1990-1999", "2000-2009", "after 2010")),
+  Population_Count = c(
+    sum(acsTractsCA.2020$Entered_2010_later_Native, na.rm = TRUE),
+    sum(acsTractsCA.2020$Entered_00_09_Native, na.rm = TRUE),
+    sum(acsTractsCA.2020$Entered_99_90_Native, na.rm = TRUE),
+    sum(acsTractsCA.2020$Entered_before_90_Native, na.rm = TRUE)
+  )
+)
+```
+
+
+```{r}
+data_2 <- data.frame(
+  Category = c("Entered_2010_foregin_born", "Entered_00_09_foregin_born", "Entered_99_90_foregin_born", "Entered_1990_foregin_born"),
+  Year = factor(c("after 2010", "2000-2009", "1990-1999", "before 1990"), 
+                levels = c("before 1990", "1990-1999", "2000-2009", "after 2010")),
+  Population_Count_f = c(
+    sum(acsTractsCA.2020$Entered_2010_foregin_born, na.rm = TRUE),
+    sum(acsTractsCA.2020$Entered_00_09_foregin_born, na.rm = TRUE),
+    sum(acsTractsCA.2020$Entered_99_90_foregin_born, na.rm = TRUE),
+    sum(acsTractsCA.2020$Entered_1990_foregin_born, na.rm = TRUE)
+  )
+)
+```
+
+```{r}
+# Combine the two data frames and create a "Type" column
+data_combined <- rbind(
+  data.frame(Year = data_1$Year, Population_Count = data_1$Population_Count, Type = "Native"),
+  data.frame(Year = data_2$Year, Population_Count = data_2$Population_Count_f, Type = "Foreign Born")
+)
+
+# Load the ggplot2 library
+library(ggplot2)
+
+# Plot the combined data
+ggplot(data_combined, aes(x = Year, y = Population_Count, color = Type, group = Type)) +
+  geom_line(size = 1.2) +       # Line for the time series
+  geom_point(size = 3) +        # Points for each year
+  labs(title = "Population Entry by Year (Native vs Foreign Born)",
+       x = "Year",
+       y = "Population Count") +
+  theme_minimal() +
+  scale_color_manual(values = c("Native" = "blue", "Foreign Born" = "red"))  # Custom colors
+
+
+```
+
+
+This time series plot represents that native & foreign-born entered California, which is efficient in demonstrating the changing population pattern by year.
+In 2020, most foreign-born entered California before 1990. The foreign-born population has continually declined portion in recent decades.
+
+The native-born population has remained stable over decades, which means it has not significantly changed in recent decades.
+
+
+# conclusion
+
+California's population pattern has continued to change over the last few decades, which still attracts in foreign immigrants. 
+According to examining the visualization plot, Visualization maps display that LA has a larger share of both native-born and foreign-born residents compared to other areas, indicating LA has a significant hub for immigrants and population growth. 
+Moreover, there was a more extensive portion of people who entered in US before 1990 and a stable decline portion of foreign-born entered in US year by year, which reveals the influx of new immigrants slowly while reflecting changing economic factors and immigration policies. 
+In contrast, the native-born enter remained stable over the years,  indicating a consistent population structure.
+
+
